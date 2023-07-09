@@ -25,10 +25,10 @@ def word_2_index(sents):
     for sent in sents:
         for w in sent:
             vocab[w] += 1
-    i = 1
+    i = 0
     word2index = {}
     for w in vocab:
-        if vocab[w] > 5:
+        if vocab[w] >= 1:
             word2index[w] = i
             i += 1
     return word2index

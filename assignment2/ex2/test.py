@@ -19,4 +19,4 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=4)
 
     model = RNN(vocab_size=len(test_data.word2index))
-    load_best(model, test_loader)
+    load_best(model, test_data)

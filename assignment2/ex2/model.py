@@ -6,11 +6,11 @@ class RNN(nn.Module):
     def __init__(self, vocab_size):
         super().__init__()
         self.hidden_size = 256
-        self.vocab_size = vocab_size +1
+        self.vocab_size = vocab_size
         self.emb_dim = 100
         self.emb = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
         self.rnn = nn.RNN(self.emb_dim, self.hidden_size)
-        self.lin = nn.Linear(self.hidden_size, self.vocab_size)
+        self.lin = nn.Linear(self.hidden_size, 9)
         self.relu = nn.ReLU()
     
     def forward(self, inp_seq):
