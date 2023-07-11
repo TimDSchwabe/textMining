@@ -1,9 +1,18 @@
 import pickle
-import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 from collections import Counter
-import copy
+
+
+def collate_fn(batch):
+    assert len(batch) == 1, "Batch size must be 1"
+    x, y = batch[0]
+    return x.to(get_device()), y.to(get_device())
+
+
+def get_device():
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
 
 class DataNER(Dataset):
     def __init__(self, sents, labels, corpus):
@@ -13,12 +22,15 @@ class DataNER(Dataset):
 
     def __len__(self):
         return len(self.labels)
-    
+
     def __getitem__(self, idx):
         sent = self.sents[idx]
         sent_idcs = [self.word2index[w] for w in sent if w in self.word2index]
+        assert len(sent_idcs) == len(
+            sent), "Some words in the sentence are not in the corpus"
         label = torch.LongTensor([self.labels[idx]])
-        return torch.LongTensor(sent_idcs), label   
+        return torch.LongTensor(sent_idcs), label
+
 
 def word_2_index(sents):
     vocab = Counter()
@@ -33,6 +45,7 @@ def word_2_index(sents):
             i += 1
     return word2index
 
+
 def get_data(file):
     tags = []
     sentences = []
@@ -42,4 +55,3 @@ def get_data(file):
             sentences.append(line[0])
             tags.append(line[1])
     return sentences, tags
-

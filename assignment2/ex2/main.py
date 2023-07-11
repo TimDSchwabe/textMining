@@ -1,71 +1,67 @@
-from torch.optim import Adam
 from tqdm import tqdm
-from sklearn.metrics import accuracy_score
+from torch.optim import AdamW
 import torch
 import torch.nn as nn
 from utils import *
 from model import RNN
-import statistics
+import copy
+
 
 def train(model, train_loader, val_loader):
     epochs = 10
-    val_accuracy = 0
+    best_acc = 0
     criterion = nn.CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=0.001)
+    optimizer = AdamW(model.parameters(), lr=0.0001)
     for e in range(epochs):
-        for X, y in tqdm(train_loader):
-            output = model(X) # [<# words in sent>, 9]
-            pred = []
-            for i in output.detach().numpy():
-                pred.append(np.argmax(i))
-            pred = torch.Tensor(pred)
-            pred.requires_grad = True
-            y = y.float()
-
-            loss = criterion(pred, y.reshape(-1))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        model.eval()
-        acc = validate(model, val_loader)
-        print(f"Accuracy at the end of epoch {e}: {acc}")
-        if acc > val_accuracy:
+        acc, loss = validate(model, val_loader, criterion)
+        print(f"Epoch {e}: \tAcc\t{acc*100:.2f}%\tLoss \t{loss:.6f}")
+        model = train_step(model, train_loader, criterion, optimizer)
+        if acc > best_acc:
             torch.save(model.state_dict(), 'best_val_model.pt')
-            val_accuracy = acc
-        model.train()
+            best_acc = acc
 
-def validate(model, val_loader):
+
+def train_step(model, train_loader, criterion, optimizer):
+    model.train()
+    for x, y in train_loader:
+        output = model(x)  # [<# words in sent>, 9]
+        loss = criterion(output, y.squeeze(0))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    return model
+
+
+def validate(model, val_loader, criterion):
+    model.eval()
     accs = []
+    losses = []
     with torch.no_grad():
-        for X, y in tqdm(val_loader):
-            output = model(X)
-            pred = []
-            for i in output.detach().numpy():
-                pred.append(np.argmax(i))
-            pred = torch.Tensor(pred)
+        for x, y in val_loader:
+            output = model(x)
+            losses.append(criterion(output, y.squeeze(0)))
+            pred = torch.argmax(output, dim=1)
             y = y.float()
-            y = y.reshape(-1)
-            same = 0
-            for i in range(pred.size(dim=0)):
-                if pred[i].item() == y[i].item(): same += 1
-            accs.append(same/pred.size(dim=0))
+            y = y.squeeze(0)
+            accs.append(torch.sum(pred == y) / len(y))
+    return torch.tensor(accs).mean(), torch.tensor(losses).mean()
 
-    return statistics.mean(accs)
 
 if __name__ == "__main__":
     train_sents, train_tags = get_data('conll2003_train.pkl')
     val_sents, val_tags = get_data('conll2003_val.pkl')
     test_sents, test_tags = get_data('conll2003_test.pkl')
-    sents_cpy = copy.deepcopy(train_sents)
-    sents_cpy.extend(val_sents)
-    sents_cpy.extend(test_sents)
+    corpus = copy.deepcopy(train_sents)
+    corpus.extend(val_sents)
+    corpus.extend(test_sents)
 
-    train_data = DataNER(train_sents, train_tags, sents_cpy)
-    val_data = DataNER(val_sents, val_tags, sents_cpy)
+    train_data = DataNER(train_sents, train_tags, corpus)
+    val_data = DataNER(val_sents, val_tags, corpus)
 
-    train_loader = DataLoader(train_data, batch_size=4)
-    val_loader = DataLoader(val_data, batch_size=4)
+    train_loader = DataLoader(train_data, batch_size=1,
+                              shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_data, batch_size=1, collate_fn=collate_fn)
 
     model = RNN(vocab_size=len(train_data.word2index))
-    train(model, train_data, val_data)
+    model = model.to(get_device())
+    train(model, train_loader, val_loader)
